@@ -93,7 +93,9 @@ import app.apt443.ui.components.PageHeader
 import app.apt443.ui.components.StatusPill
 import app.apt443.ui.components.StatusTone
 import app.apt443.ui.components.rememberAlertPermissions
+import app.apt443.ui.player.LiveAudio
 import app.apt443.ui.player.LiveStreamTile
+import app.apt443.ui.player.liveAudioKeys
 import app.apt443.ui.player.StreamPhase
 import app.apt443.ui.player.StreamPlayback
 import app.apt443.ui.player.StreamUrlCache
@@ -335,7 +337,7 @@ private fun LiveCameraTile(
     val status = tileStatus(phase, camera.online)
     AptFocusSurface(
         onClick = onOpen,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.liveAudioKeys(camera.id).fillMaxWidth(),
         corner = AptRadius.tile,
         fill = AptColors.PreviewWell,
     ) {
@@ -519,6 +521,10 @@ fun LiveScreen(
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val isBack = event.key == Key.Back || event.key == Key.Escape
                 if (isBack) return@onPreviewKeyEvent false
+                if (event.key == Key.MediaPlayPause) {
+                    LiveAudio.toggle(cameraId)
+                    return@onPreviewKeyEvent true
+                }
                 activityTick++
                 if (!hudVisible) {
                     hudVisible = true

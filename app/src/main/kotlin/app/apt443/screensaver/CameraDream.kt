@@ -417,6 +417,7 @@ private fun DreamTile(
         ) {
             LiveStreamTile(
                 cameraId = camera.id,
+                audible = false,
                 quality = StreamQuality.Low,
                 container = container,
                 client = client,
