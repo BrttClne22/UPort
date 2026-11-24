@@ -1,5 +1,6 @@
 package app.apt443.ui.screens
 
+import app.apt443.data.live.consoleHost
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -1013,10 +1014,17 @@ private fun SetupPage(
                 }
                 AptSwitchRow(
                     label = "Trust console certificate",
-                    description = if (trustValue) "Accepts this console's self-signed certificate." else "Uses system trust only.",
+                    description = if (trustValue) {
+                        "Pinned to this console's key on first connect. Turn off and on to re-pin after a console reset."
+                    } else {
+                        "Uses system trust only."
+                    },
                     checked = trustValue,
                     icon = AptIconKind.Lock,
-                    onToggle = { scope.editSettings(container) { it.copy(trustConsoleCertificate = !trustValue) } },
+                    onToggle = {
+                        if (trustValue) container.http.forgetPin(consoleHost(saved))
+                        scope.editSettings(container) { it.copy(trustConsoleCertificate = !trustValue) }
+                    },
                 )
             }
         }

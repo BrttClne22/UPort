@@ -72,6 +72,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import app.apt443.tailscale.TailscaleLogin
+import app.apt443.net.SharedPrefsPinStore
 import app.apt443.ui.player.StreamEpoch
 import app.apt443.ui.player.StreamUrlCache
 
@@ -79,7 +80,7 @@ class AppContainer(private val context: Context) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val settingsRepository = SettingsRepository(context)
     val secrets: SecretStore = KeystoreSecretStore(context)
-    val http = UnifiHttp()
+    val http = UnifiHttp(SharedPrefsPinStore(context))
     val vpnReach = VpnReach(context, secrets)
     val vpnConsent = vpnReach.consent
     val speech = DeviceSpeech(context.applicationContext)
