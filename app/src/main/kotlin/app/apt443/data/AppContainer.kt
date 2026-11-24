@@ -13,7 +13,7 @@ import app.apt443.data.live.LiveNetworkRepository
 import app.apt443.data.live.LiveProtectRepository
 import app.apt443.data.live.NetworkIntegrationClient
 import app.apt443.data.live.ProtectIntegrationClient
-import app.apt443.data.live.GoogleTranslateSpeech
+import app.apt443.data.live.DeviceSpeech
 import app.apt443.data.live.TalkbackAnnouncer
 import app.apt443.data.live.ProtectLegacySession
 import app.apt443.data.live.RecordingCache
@@ -42,6 +42,8 @@ import app.apt443.domain.ConsoleAccount
 import app.apt443.domain.DataSourceMode
 import app.apt443.domain.NetworkRepository
 import app.apt443.domain.ProtectClipQuery
+import app.apt443.domain.Feed
+import app.apt443.domain.ProtectEvent
 import app.apt443.domain.ProtectRepository
 import app.apt443.domain.PtzMove
 import app.apt443.domain.ConsoleSignInMode
@@ -65,6 +67,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -72,6 +76,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import app.apt443.tailscale.TailscaleLogin
+import app.apt443.net.SharedPrefsPinStore
 import app.apt443.ui.player.StreamEpoch
 import app.apt443.ui.player.StreamUrlCache
 
@@ -79,10 +84,10 @@ class AppContainer(private val context: Context) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val settingsRepository = SettingsRepository(context)
     val secrets: SecretStore = KeystoreSecretStore(context)
-    val http = UnifiHttp()
+    val http = UnifiHttp(SharedPrefsPinStore(context))
     val vpnReach = VpnReach(context, secrets)
     val vpnConsent = vpnReach.consent
-    val speech = GoogleTranslateSpeech(context.applicationContext)
+    val speech = DeviceSpeech(context.applicationContext)
 
     val settings: Flow<AppSettings> = settingsRepository.settings
 
@@ -118,7 +123,11 @@ class AppContainer(private val context: Context) {
         scope = appScope,
     )
 
-    val protect: ProtectRepository = SwitchingProtect(settings, demoProtect, liveProtect)
+    private val switchingProtect = SwitchingProtect(settings, demoProtect, liveProtect)
+    val protect: ProtectRepository = switchingProtect
+
+    /** Every camera, hidden ones included, for the show/hide list in Settings. */
+    fun allCameras(): Flow<Feed<app.apt443.domain.Camera>> = switchingProtect.allCameras()
     val network: NetworkRepository = SwitchingNetwork(settings, demoNetwork, liveNetwork)
     val access: AccessRepository = SwitchingAccess(settings, demoAccess, liveAccess)
     val connectionDetail: Flow<String> = monitor.detail
@@ -239,6 +248,14 @@ class AppContainer(private val context: Context) {
             _startup.value = Startup.Loading("Connecting to the console.")
             delay(5_000)
         }
+    }
+
+    /** Protect liveviews for the Multiview screen. Fails in demo mode or without an API key. */
+    suspend fun liveviews(): Result<List<app.apt443.domain.Liveview>> {
+        val current = settings.first()
+        if (current.dataSource == app.apt443.domain.DataSourceMode.Demo) return Result.success(emptyList())
+        return runCatching { protectClient.getLiveviews(current, ConnectionMode.OnNetwork) }
+            .getOrElse { Result.failure(it) }
     }
 
     suspend fun saveSettings(settings: AppSettings) {
@@ -491,6 +508,8 @@ class AppContainer(private val context: Context) {
 
     suspend fun applySitePackage(bytes: ByteArray, tvReachRaw: String? = null): Result<String> {
         val pack = SitePackage.parse(bytes).getOrElse { return Result.failure(it) }
+        // No local account in the file: connect with the Protect API key alone.
+        val signInMode = if (pack.osUsername.isBlank()) ConsoleSignInMode.ApiKeyOnly else ConsoleSignInMode.LocalUserAndApiKey
         SitePackage.parseTvReach(tvReachRaw).getOrElse { return Result.failure(it) }
         secrets.put(SecretKeys.PROTECT_API_KEY, pack.apiKey)
         secrets.put(SecretKeys.ACCESS_TOKEN, pack.apiKey)
@@ -519,7 +538,7 @@ class AppContainer(private val context: Context) {
             dataSource = DataSourceMode.Live,
             siteConfigured = true,
             accountGate = AccountGate.SignedOut,
-            signInMode = ConsoleSignInMode.LocalUserAndApiKey,
+            signInMode = signInMode,
             reachPreference = ReachPreference.Auto,
             reachChosen = true,
             vpnKind = if (kind == SiteVpnKind.WireGuard) SiteVpnKind.None else kind,
@@ -541,10 +560,15 @@ class AppContainer(private val context: Context) {
             draft,
             pack.apiKey,
             pack.osPassword,
-            ConsoleSignInMode.LocalUserAndApiKey,
+            signInMode,
         )
         return when (probe) {
-            is SignInResult.SignedIn -> Result.success("Connected to ${pack.siteName}. Residents can sign in on the TV.")
+            is SignInResult.SignedIn -> {
+                // One household per TV: signing in to the console is the whole setup.
+                val latest = settings.first()
+                saveSettings(latest.copy(accountGate = AccountGate.Console, dataSource = DataSourceMode.Live))
+                Result.success("Connected to ${pack.siteName}.")
+            }
             is SignInResult.Failed -> Result.failure(IllegalStateException(probe.message))
         }
     }
@@ -606,16 +630,31 @@ private class SwitchingProtect(
     private fun source() = settings.map { if (it.dataSource == DataSourceMode.Demo) demo else live }.distinctUntilChanged()
 
     override val connectionMode: Flow<ConnectionMode> = source().flatMapLatest { it.connectionMode }
-    override fun cameras() = source().flatMapLatest { it.cameras() }
+    // Hidden cameras are dropped here, so they leave every screen, Playback and alerts alike.
+    private val hidden = settings.map { it.hiddenCameraIds }.distinctUntilChanged()
+    private fun shown(cameraId: String?, hiddenIds: Set<String>) = cameraId == null || cameraId !in hiddenIds
+
+    /** Every camera, hidden ones included. Only the "Show in this app" settings list uses it. */
+    fun allCameras() = source().flatMapLatest { it.cameras() }
+    override fun cameras() = combine(allCameras(), hidden) { feed, ids ->
+        feed.copy(items = feed.items.filter { it.id !in ids })
+    }
     override fun lights() = source().flatMapLatest { it.lights() }
     override fun sensors() = source().flatMapLatest { it.sensors() }
-    override fun events() = source().flatMapLatest { it.events() }
+    override fun events() = combine(source().flatMapLatest { it.events() }, hidden) { feed, ids ->
+        feed.copy(items = feed.items.filter { shown(it.cameraId, ids) })
+    }
     override fun alerts() = source().flatMapLatest { it.alerts() }
+        .filter { shown(it.cameraId, settings.first().hiddenCameraIds) }
     override fun clips(cameraId: String) = source().flatMapLatest { it.clips(cameraId) }
     override suspend fun liveStream(cameraId: String, quality: StreamQuality) = pick().liveStream(cameraId, quality)
     override suspend fun previewJpeg(cameraId: String, highQuality: Boolean) = pick().previewJpeg(cameraId, highQuality)
     override suspend fun eventStill(eventId: String, thumbnailId: String) = pick().eventStill(eventId, thumbnailId)
-    override suspend fun footage(query: ProtectClipQuery) = pick().footage(query)
+    override suspend fun footage(query: ProtectClipQuery): Feed<ProtectEvent> {
+        val feed = pick().footage(query)
+        val ids = settings.first().hiddenCameraIds
+        return feed.copy(items = feed.items.filter { shown(it.cameraId, ids) })
+    }
     override suspend fun playback(clip: app.apt443.domain.FootageClip, onProgress: (Float) -> Unit) =
         pick().playback(clip, onProgress)
     override suspend fun previewAlert(cameraId: String?) = pick().previewAlert(cameraId)

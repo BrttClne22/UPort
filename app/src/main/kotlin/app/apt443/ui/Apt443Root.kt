@@ -107,15 +107,13 @@ import app.apt443.ui.components.StatusDot
 import app.apt443.ui.components.StatusTone
 import app.apt443.ui.components.aptFocusFrame
 import app.apt443.ui.components.color
-import app.apt443.ui.screens.AccessScreen
 import app.apt443.ui.screens.AccountScreen
 import app.apt443.ui.screens.CameraWizardBus
 import app.apt443.ui.screens.CameraWizardScreen
 import app.apt443.ui.screens.CamerasScreen
 import app.apt443.ui.screens.FootageScreen
 import app.apt443.ui.screens.LiveScreen
-import app.apt443.ui.screens.NetworkScreen
-import app.apt443.ui.screens.RemoteScreen
+import app.apt443.ui.screens.MultiviewScreen
 import app.apt443.ui.screens.SettingsScreen
 import app.apt443.ui.screens.SignInScreen
 import app.apt443.ui.screens.StreamSetupScreen
@@ -138,6 +136,7 @@ import app.apt443.ui.theme.AptType
 object Routes {
     const val Home = "home"
     const val Cameras = "cameras"
+    const val Multiview = "multiview"
     const val Live = "live/{cameraId}"
     const val Footage = "footage"
     const val Network = "network"
@@ -152,32 +151,15 @@ object Routes {
     fun stream(cameraId: String) = "stream/${android.net.Uri.encode(cameraId)}"
 }
 
-@Composable
-private fun TailscaleConsentPrompt(container: AppContainer) {
-    val context = LocalContext.current
-    val request by container.vpnConsent.request.collectAsStateWithLifecycle()
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        container.vpnConsent.complete(result.resultCode == Activity.RESULT_OK)
-    }
-    LaunchedEffect(request) {
-        if (request == null) return@LaunchedEffect
-        val intent = VpnService.prepare(context)
-        if (intent == null) container.vpnConsent.complete(true) else launcher.launch(intent)
-    }
-}
-
 private data class Destination(val route: String, val label: String, val icon: AptIconKind)
 
 private val destinations = listOf(
+    Destination(Routes.Multiview, "Multiview", AptIconKind.Tv),
     Destination(Routes.Cameras, "Live Feed", AptIconKind.Camera),
     Destination(Routes.Footage, "Playback", AptIconKind.Footage),
-    Destination(Routes.Access, "Access", AptIconKind.Door),
-    Destination(Routes.Network, "Network", AptIconKind.Network),
-    Destination(Routes.Remote, "Tailscale", AptIconKind.Remote),
     Destination(Routes.Settings, "Settings", AptIconKind.Settings),
 )
 
-private val accountDestination = Destination(Routes.Account, "My account", AptIconKind.Account)
 
 @Composable
 private fun StartupLock(container: AppContainer, detail: String, canReset: Boolean) {
@@ -225,7 +207,7 @@ private fun StartupLock(container: AppContainer, detail: String, canReset: Boole
             }
             if (canReset && confirmReset) {
                 Text(
-                    text = "Delete the console and Tailscale login from this TV?",
+                    text = "Delete the console login from this TV?",
                     fontSize = AptType.body,
                     color = AptColors.OnBackground,
                     textAlign = TextAlign.Center,
@@ -260,7 +242,6 @@ fun FocusDirection.isDpad(): Boolean =
 
 @Composable
 fun Apt443Root(container: AppContainer) {
-    TailscaleConsentPrompt(container)
     val settings by produceState<AppSettings?>(initialValue = null) {
         container.settings.collect { value = it }
     }
@@ -274,7 +255,8 @@ fun Apt443Root(container: AppContainer) {
         StartupLock(container, detail = (startup as Startup.Loading).detail, canReset = true)
         return
     }
-    if (current.accountGate != AccountGate.Console) {
+    // Household TV: the site file is the only setup step. No resident name/email pick.
+    if (!current.siteConfigured) {
         SignInScreen(container)
         return
     }
@@ -459,7 +441,7 @@ private fun SignedInShell(container: AppContainer, settings: AppSettings) {
             ) {
                 NavHost(
                     navController = nav,
-                    startDestination = Routes.Cameras,
+                    startDestination = Routes.Multiview,
                     enterTransition = { pageEnter },
                     exitTransition = { pageExit },
                     popEnterTransition = { pageEnter },
@@ -479,6 +461,7 @@ private fun SignedInShell(container: AppContainer, settings: AppSettings) {
                             },
                         ),
                 ) {
+                    composable(Routes.Multiview) { MultiviewScreen(container, client, nav) }
                     composable(Routes.Cameras) { CamerasScreen(container, client, nav) }
                     composable(
                         route = Routes.Live,
@@ -504,15 +487,6 @@ private fun SignedInShell(container: AppContainer, settings: AppSettings) {
                         )
                     }
                     composable(Routes.Footage) { FootageScreen(container, client) }
-                    composable(Routes.Network) {
-                        NetworkScreen(container, onOpenRemote = { nav.navigate(Routes.Remote) { launchSingleTop = true } })
-                    }
-                    composable(Routes.Remote) {
-                        RemoteScreen(container, onOpenSettings = { nav.navigate(Routes.Settings) { launchSingleTop = true } })
-                    }
-                    composable(Routes.Access) {
-                        AccessScreen(container, onOpenRemote = { nav.navigate(Routes.Remote) { launchSingleTop = true } })
-                    }
                     composable(Routes.Settings) { SettingsScreen(container) }
                     composable(Routes.Account) { AccountScreen(container) }
                 }
@@ -659,15 +633,13 @@ private fun Rail(
     ) {
         RailBrand(locationName = settings.locationName, expanded = expanded)
         Spacer(modifier = Modifier.height(AptSpace.lg))
-        val focusRoute = if (route == Routes.Account) {
-            Routes.Account
-        } else {
+        val focusRoute = run {
             destinations.firstOrNull { destination ->
                 val selected = route == destination.route ||
                     (destination.route == Routes.Cameras && route?.startsWith("live/") == true)
                 val homeOnly = destination.route == Routes.Network && mode != ConnectionMode.OnNetwork
                 selected && !homeOnly
-            }?.route ?: Routes.Cameras
+            }?.route ?: Routes.Multiview
         }
         destinations.forEach { destination ->
             val selected = route == destination.route ||
@@ -687,17 +659,6 @@ private fun Rail(
             )
         }
         Spacer(modifier = Modifier.weight(1f))
-        RailItem(
-            destination = accountDestination,
-            selected = route == Routes.Account,
-            expanded = expanded,
-            open = open,
-            focusRequester = if (route == Routes.Account) railFocus else null,
-            onClick = {
-                onClose()
-                nav.navigate(Routes.Account) { launchSingleTop = true }
-            },
-        )
         Spacer(modifier = Modifier.height(AptSpace.xs))
         RailStatus(mode = mode, cameras = cameras, expanded = expanded)
     }

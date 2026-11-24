@@ -38,6 +38,8 @@ class RtspLinkServer(
         urlState.value = null
     }
 
+    @Volatile private var token: String = ""
+
     private fun runServer() {
         val server = openSocket() ?: run {
             statusState.value = "This TV could not open a page for the phone."
@@ -50,7 +52,9 @@ class RtspLinkServer(
             runCatching { server.close() }
             return
         }
-        urlState.value = "http://$endpoint/stream"
+        token = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+            .joinToString("") { "%02x".format(it) }
+        urlState.value = "http://$endpoint/stream/$token"
         statusState.value = "Scan the code, then paste the camera's RTSP address."
         while (!server.isClosed) {
             val client = try {
@@ -75,7 +79,8 @@ class RtspLinkServer(
             return
         }
         val path = request.path.substringBefore('?')
-        if (path != "/stream" && path != "/") {
+        // A random token in the path keeps other devices on the LAN from swapping the stream.
+        if (token.isEmpty() || path != "/stream/$token") {
             write(client, 200, page("Open the address shown on the TV.", error = true))
             return
         }
@@ -131,7 +136,7 @@ class RtspLinkServer(
             <h1>${escape(cameraName)}</h1>
             <p>Paste the camera's RTSP address. It is saved on the TV only.</p>
             $note
-            <form method="post" action="/stream">
+            <form method="post" action="">
             <label for="url">RTSP address</label>
             <input id="url" name="url" type="url" inputmode="url" autocomplete="off" placeholder="rtsp://192.168.0.20:554/stream" required>
             <button type="submit">Save on the TV</button>

@@ -325,6 +325,7 @@ private fun PersistentPicture(
     if (item.picture == PopupPicture.Live) {
         LiveStreamTile(
             cameraId = item.cameraId,
+            audible = false,
             quality = settings.pipStreamQuality,
             container = container,
             client = client,

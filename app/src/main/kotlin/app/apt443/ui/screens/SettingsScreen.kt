@@ -1,5 +1,6 @@
 package app.apt443.ui.screens
 
+import app.apt443.data.live.consoleHost
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -909,8 +910,9 @@ private fun PhrasePreview(title: String, phrases: List<SpeakerPhrase>) {
 @Composable
 private fun CamerasPage(container: AppContainer, saved: AppSettings, cameras: Feed<Camera>) {
     val scope = rememberCoroutineScope()
+    val every by container.allCameras().collectAsStateWithLifecycle(initialValue = cameras)
     SettingsList {
-        if (cameras.items.isEmpty()) {
+        if (every.items.isEmpty()) {
             item(key = "empty") {
                 EmptyState(
                     title = "No cameras yet",
@@ -932,6 +934,28 @@ private fun CamerasPage(container: AppContainer, saved: AppSettings, cameras: Fe
                     style = AptButtonStyle.Primary,
                     onClick = { CameraWizardBus.openAll() },
                 )
+            }
+        }
+        item(key = "visible") {
+            SettingsSection(
+                title = "Show in this app",
+                description = "A hidden camera leaves every screen on this TV: live views, Playback, the screensaver and alerts.",
+            ) {
+                every.items.filter { it.id.isNotBlank() }.forEach { camera ->
+                    val shown = camera.id !in saved.hiddenCameraIds
+                    AptSwitchRow(
+                        label = camera.name.ifBlank { "Camera" },
+                        description = if (shown) "Shown" else "Hidden",
+                        checked = shown,
+                        icon = if (camera.isDoorbell) AptIconKind.Bell else AptIconKind.Camera,
+                        onToggle = {
+                            scope.editSettings(container) {
+                                val hidden = if (shown) it.hiddenCameraIds + camera.id else it.hiddenCameraIds - camera.id
+                                it.copy(hiddenCameraIds = hidden)
+                            }
+                        },
+                    )
+                }
             }
         }
         items(cameras.items, key = { it.id }) { camera ->
@@ -1007,16 +1031,19 @@ private fun SetupPage(
                     fontSize = AptType.body,
                     color = AptColors.Secondary,
                 )
-                InfoRow("Tailscale", if (saved.vpnKind == SiteVpnKind.Tailscale) vpn.stateLabel.ifBlank { "Saved" } else "None")
-                if (saved.vpnKind == SiteVpnKind.Tailscale && vpn.summary.isNotBlank()) {
-                    Text(vpn.summary, fontSize = AptType.body, color = AptColors.Secondary)
-                }
                 AptSwitchRow(
                     label = "Trust console certificate",
-                    description = if (trustValue) "Accepts this console's self-signed certificate." else "Uses system trust only.",
+                    description = if (trustValue) {
+                        "Pinned to this console's key on first connect. Turn off and on to re-pin after a console reset."
+                    } else {
+                        "Uses system trust only."
+                    },
                     checked = trustValue,
                     icon = AptIconKind.Lock,
-                    onToggle = { scope.editSettings(container) { it.copy(trustConsoleCertificate = !trustValue) } },
+                    onToggle = {
+                        if (trustValue) container.http.forgetPin(consoleHost(saved))
+                        scope.editSettings(container) { it.copy(trustConsoleCertificate = !trustValue) }
+                    },
                 )
             }
         }

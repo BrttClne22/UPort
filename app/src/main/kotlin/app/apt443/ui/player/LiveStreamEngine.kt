@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -58,6 +60,8 @@ import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import app.apt443.data.AppContainer
 import app.apt443.domain.Availability
 import app.apt443.domain.StreamQuality
+import app.apt443.ui.components.AptIcon
+import app.apt443.ui.components.AptIconKind
 import app.apt443.ui.theme.AptColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -120,7 +124,10 @@ fun LiveStreamTile(
     overlay: @Composable BoxScope.(StreamPhase) -> Unit = {},
     crop: Boolean = false,
     onAspect: (Float) -> Unit = {},
+    audible: Boolean? = null,
 ) {
+    val audioSet by LiveAudio.audible.collectAsStateWithLifecycle()
+    val heard = audible ?: (cameraId in audioSet)
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val foreground = lifecycleState.isAtLeast(Lifecycle.State.STARTED)
     val active = enabled && playing && foreground && cameraId.isNotBlank()
@@ -235,6 +242,7 @@ fun LiveStreamTile(
                     connectTimeoutMs = policy.connectTimeoutMs,
                     stallTimeoutMs = policy.stallTimeoutMs,
                     paused = paused,
+                    audible = heard,
                     modifier = playerFrame,
                     onAspect = { next ->
                         if (next.isFinite() && next in 0.25f..4f) ratio = next
@@ -254,6 +262,22 @@ fun LiveStreamTile(
             )
         }
         overlay(phase)
+        if (heard && phase == StreamPhase.Live) {
+            AudioBadge(modifier = Modifier.align(Alignment.TopEnd))
+        }
+    }
+}
+
+/** Small speaker mark on a tile whose audio is on. */
+@Composable
+private fun AudioBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .padding(10.dp)
+            .background(Color(0xCC000000), CircleShape)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        AptIcon(kind = AptIconKind.Speaker, modifier = Modifier.size(20.dp), tint = Color.White)
     }
 }
 
@@ -376,13 +400,15 @@ private fun LivePlayerSurface(
     connectTimeoutMs: Long,
     stallTimeoutMs: Long,
     paused: Boolean = false,
+    audible: Boolean = false,
     modifier: Modifier,
     onAspect: (Float) -> Unit,
     onSignal: (PlayerSignal) -> Unit,
 ) {
     val context = LocalContext.current
     val isRtsp = url.startsWith("rtsp", ignoreCase = true)
-    val player = remember(url, attempt) { StreamPlayback.buildPlayer(context, url, client) }
+    // Audio is part of the key: toggling it reconnects this tile with or without the audio track.
+    val player = remember(url, attempt, audible) { StreamPlayback.buildPlayer(context, url, client, withAudio = audible) }
     val aspectCallback by rememberUpdatedState(onAspect)
     val signalCallback by rememberUpdatedState(onSignal)
     val hold by rememberUpdatedState(paused)
@@ -427,6 +453,9 @@ private fun LivePlayerSurface(
     }
 
     LaunchedEffect(player, paused) { player.playWhenReady = !paused }
+    LaunchedEffect(player, audible) {
+        player.volume = if (audible) 1f else 0f
+    }
     LaunchedEffect(player) {
         var started = System.currentTimeMillis()
         var lastPosition = -1L

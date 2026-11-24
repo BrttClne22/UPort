@@ -93,13 +93,14 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
-    // tailscale-android 264102cc702fbd844e900227ee02e5cbb4d7f801, armeabi-v7a and arm64.
-    implementation(files("libs/libtailscale.aar"))
     implementation(libs.zxing.core)
 
     implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.androidx.media3.exoplayer.rtsp)
     implementation(libs.androidx.media3.datasource.okhttp)
+    // media3-exoplayer-rtsp 1.11.1 is vendored under src/main/java with an Opus-over-RTP fix;
+    // its sources need these annotation jars at compile time only.
+    compileOnly("org.checkerframework:checker-qual:3.49.0")
+    compileOnly("com.google.errorprone:error_prone_annotations:2.36.0")
     implementation(libs.androidx.media3.ui.compose)
 
     testImplementation("junit:junit:4.13.2")

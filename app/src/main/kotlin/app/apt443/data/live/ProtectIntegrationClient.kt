@@ -6,6 +6,8 @@ import app.apt443.domain.Camera
 import app.apt443.domain.ConsoleAccount
 import app.apt443.domain.ConnectionMode
 import app.apt443.domain.FootageClip
+import app.apt443.domain.Liveview
+import app.apt443.domain.LiveviewSlot
 import app.apt443.domain.ProtectClipQuery
 import app.apt443.domain.ProtectEvent
 import app.apt443.domain.ProtectEventType
@@ -26,7 +28,7 @@ import java.io.File
  * Official Protect Integration API.
  *
  * Local:  https://<console>/proxy/protect/integration/v1
- * Remote: https://api.ui.com/v1/connector/consoles/{consoleId}/proxy/protect/integration/v1
+ * (The upstream cloud-connector path through api.ui.com is removed in this LAN-only build.)
  *
  * Source: developer.ui.com Protect integration (v7.x pages checked Oct 2026),
  * including cameras, events, snapshots, RTSPS, talkback, and subscribe/events.
@@ -43,6 +45,16 @@ class ProtectIntegrationClient(
         return http.text(settings, url, "GET", apiKeyHeader(key)).mapCatching { response ->
             if (response.code !in 200..299) error("Protect cameras HTTP ${response.code}")
             parseCameras(response.body)
+        }
+    }
+
+    /** Liveviews (multiview layouts) saved in Protect. */
+    suspend fun getLiveviews(settings: AppSettings, mode: ConnectionMode): Result<List<Liveview>> {
+        val key = keyFor(mode) ?: return Result.failure(IllegalStateException(missingKey(mode)))
+        val url = url(settings, mode, "/liveviews")
+        return http.text(settings, url, "GET", apiKeyHeader(key)).mapCatching { response ->
+            if (response.code !in 200..299) error("Protect liveviews HTTP ${response.code}")
+            parseLiveviews(response.body)
         }
     }
 
@@ -242,32 +254,19 @@ class ProtectIntegrationClient(
         }
     }
 
-    private suspend fun keyFor(mode: ConnectionMode): String? {
-        return if (mode == ConnectionMode.Remote) {
-            secrets.get(SecretKeys.SITE_MANAGER_KEY)
-        } else {
-            secrets.get(SecretKeys.PROTECT_API_KEY)
-        }
-    }
+    /** LAN-only build: always the console's own Protect API key, never a cloud Site Manager key. */
+    @Suppress("UNUSED_PARAMETER")
+    private suspend fun keyFor(mode: ConnectionMode): String? = secrets.get(SecretKeys.PROTECT_API_KEY)
 
-    private fun missingKey(mode: ConnectionMode): String {
-        return if (mode == ConnectionMode.Remote) {
-            "Site Manager API key is not set."
-        } else {
-            "Protect integration API key is not set."
-        }
-    }
+    @Suppress("UNUSED_PARAMETER")
+    private fun missingKey(mode: ConnectionMode): String = "Protect integration API key is not set."
 
+    /** LAN-only build: the cloud connector at api.ui.com is never used. */
+    @Suppress("UNUSED_PARAMETER")
     private fun url(settings: AppSettings, mode: ConnectionMode, path: String): String {
-        return if (mode == ConnectionMode.Remote) {
-            val id = settings.consoleId.trim()
-            if (id.isBlank()) error("Console ID is required for the cloud connector.")
-            "https://api.ui.com/v1/connector/consoles/$id/proxy/protect/integration/v1$path"
-        } else {
-            val host = consoleHost(settings)
-            if (host.isBlank()) error("Console host is required.")
-            "https://$host/proxy/protect/integration/v1$path"
-        }
+        val host = consoleHost(settings)
+        if (host.isBlank()) error("Console host is required.")
+        return "https://$host/proxy/protect/integration/v1$path"
     }
 
     private suspend fun postPtz(
@@ -966,6 +965,47 @@ private fun splitFullName(full: String, first: String, last: String): Pair<Strin
         parts.isEmpty() -> Pair("", "")
         parts.size == 1 -> Pair(parts[0], "")
         else -> Pair(parts.first(), parts.last())
+    }
+}
+
+internal fun parseLiveviews(body: String): List<Liveview> {
+    val array = jsonArray(body, "data") ?: jsonArray(body, "liveviews") ?: return emptyList()
+    return buildList {
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val id = item.optString("id")
+            if (id.isBlank()) continue
+            val slotArray = item.optJSONArray("slots") ?: JSONArray()
+            val slots = buildList {
+                for (j in 0 until slotArray.length()) {
+                    val slot = slotArray.optJSONObject(j)
+                    val cameras = slot?.optJSONArray("cameras")
+                    val ids = buildList {
+                        if (cameras != null) {
+                            for (k in 0 until cameras.length()) {
+                                val camera = cameras.opt(k)
+                                val cameraId = when (camera) {
+                                    is String -> camera
+                                    is JSONObject -> camera.optString("id")
+                                    else -> ""
+                                }
+                                if (cameraId.isNotBlank()) add(cameraId)
+                            }
+                        }
+                    }
+                    val interval = slot?.optInt("cycleInterval", 10) ?: 10
+                    add(LiveviewSlot(ids, interval.coerceIn(3, 600)))
+                }
+            }
+            add(
+                Liveview(
+                    id = id,
+                    name = item.optString("name").ifBlank { "View" },
+                    isDefault = item.optBoolean("isDefault"),
+                    slots = slots,
+                ),
+            )
+        }
     }
 }
 

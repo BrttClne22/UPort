@@ -266,6 +266,7 @@ fun CameraWizardScreen(
             Box(modifier = Modifier.fillMaxWidth().aptPanel(fill = AptColors.PreviewWell, corner = AptRadius.tile)) {
                 LiveStreamTile(
                     cameraId = camera.id,
+                    audible = false,
                     quality = StreamQuality.Low,
                     container = container,
                     client = client,

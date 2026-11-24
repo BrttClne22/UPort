@@ -1,6 +1,9 @@
 package app.apt443.data.live
 
 import app.apt443.domain.AppSettings
+import app.apt443.net.LanOnly
+import app.apt443.net.PinStore
+import app.apt443.net.PinningTrustManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -19,12 +22,10 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.io.File
 import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 data class HttpText(val code: Int, val body: String, val headers: Map<String, String>)
 
@@ -64,10 +65,10 @@ class MemoryCookieJar : CookieJar {
 }
 
 /**
- * HTTPS client for one console. Trust-on-demand is limited to the configured
- * host and is off unless Settings enables it. Do not use this for public sites.
+ * HTTPS client for one console. When Settings trusts the console's own certificate,
+ * its public key is pinned on first use and must match afterwards.
  */
-class UnifiHttp {
+class UnifiHttp(private val pins: PinStore) {
     val cookies = MemoryCookieJar()
 
     private val strictClient = baseBuilder().build()
@@ -83,6 +84,16 @@ class UnifiHttp {
             .readTimeout(25, TimeUnit.SECONDS)
             .writeTimeout(25, TimeUnit.SECONDS)
             .followRedirects(false)
+            .followSslRedirects(false)
+            .addNetworkInterceptor(LanOnly)
+    }
+
+    /** Forget the pinned key for [host], e.g. after replacing the console. */
+    fun forgetPin(host: String) {
+        val bare = host.substringBefore(':').lowercase()
+        pins.clear(bare)
+        trustedByHost.remove(bare)?.connectionPool?.evictAll()
+        probeByKey.clear()
     }
 
     /** Drop sockets left over from the previous Wi-Fi or Ethernet link. */
@@ -249,11 +260,7 @@ class UnifiHttp {
     private fun trustedHostClient(host: String): OkHttpClient {
         val bareHost = host.substringBefore(':')
         return trustedByHost.computeIfAbsent(bareHost) { trusted ->
-            val trust = object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-            }
+            val trust = PinningTrustManager(trusted.lowercase(), pins)
             val context = SSLContext.getInstance("TLS")
             context.init(null, arrayOf<TrustManager>(trust), SecureRandom())
             baseBuilder()

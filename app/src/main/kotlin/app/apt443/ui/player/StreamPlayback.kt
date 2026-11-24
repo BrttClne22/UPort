@@ -29,10 +29,13 @@ object StreamPlayback {
         .setPrioritizeTimeOverSizeThresholds(true)
         .build()
 
-    fun buildPlayer(context: Context, url: String, client: OkHttpClient): ExoPlayer {
+    fun buildPlayer(context: Context, url: String, client: OkHttpClient, withAudio: Boolean = false): ExoPlayer {
         val isRtsp = url.startsWith("rtsp", ignoreCase = true)
+        // RTSP sets up its tracks once, when playback starts, so audio cannot be added to a
+        // running stream. A muted tile connects video-only; unmuting rebuilds the player with
+        // the audio track (see LivePlayerSurface).
         val trackSelector = DefaultTrackSelector(context).apply {
-            if (isRtsp) {
+            if (isRtsp && !withAudio) {
                 setParameters(
                     buildUponParameters()
                         .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)

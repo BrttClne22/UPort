@@ -119,8 +119,11 @@ data class SitePackage(
             val osPass = root.optString("osPassword").trim()
             if (host.isBlank()) error("Console address is missing.")
             if (key.isBlank()) error("API key is missing.")
-            if (osUser.isBlank()) error("Local console admin username is missing.")
-            if (osPass.isBlank()) error("Local console admin password is missing.")
+            // The local account is optional: the Protect API key covers live view. It is only used
+            // for recordings export and bootstrap fallbacks, so a view-only local user is enough.
+            if (osUser.isBlank() != osPass.isBlank()) {
+                error("Enter both the local username and password, or leave both blank.")
+            }
             val vpnFields = readVpn(root)
             val reachRaw = if (root.has("tvReach")) root.optString("tvReach") else ""
             val reach = parseTvReach(reachRaw).getOrElse { throw it }

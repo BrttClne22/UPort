@@ -6,7 +6,17 @@ import java.net.URI
 import java.net.URL
 
 /** Downloads a site file from a direct http(s) link the viewer pasted on the phone. */
-internal fun fetchRemoteSiteFile(rawUrl: String, maxBytes: Int = 512 * 1024): Result<ByteArray> = runCatching {
+internal fun fetchRemoteSiteFile(rawUrl: String, maxBytes: Int = 512 * 1024): Result<ByteArray> =
+    if (DOWNLOAD_LINKS_ENABLED) {
+        fetchFromLink(rawUrl, maxBytes)
+    } else {
+        Result.failure(IllegalStateException("Download links are off in this LAN-only build. Upload the file instead."))
+    }
+
+/** The TV never fetches site files from the internet in this build. */
+private const val DOWNLOAD_LINKS_ENABLED = false
+
+private fun fetchFromLink(rawUrl: String, maxBytes: Int): Result<ByteArray> = runCatching {
     var current = rawUrl.trim()
     if (current.isBlank()) error("Paste a direct download link.")
     repeat(5) {

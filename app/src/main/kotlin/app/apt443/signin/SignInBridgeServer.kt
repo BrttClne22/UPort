@@ -166,9 +166,6 @@ class SignInBridgeServer(
             return
         }
         when {
-            request.method.equals("GET", ignoreCase = true) && queryParam(request.path, "download") == "1" -> {
-                serveSiteFile(socket)
-            }
             request.method.equals("GET", ignoreCase = true) && queryParam(request.path, "watch") == "1" -> {
                 val name = if (mode() == SignInFlowMode.SiteSetup) "setup" else "signin"
                 writeText(socket, 200, name)
@@ -326,7 +323,7 @@ class SignInBridgeServer(
         field(html, "consoleHost", "Console address", fields, "192.168.0.1", "text")
         field(html, "apiKey", "API key", fields, "", "password")
         field(html, "osUsername", "Local admin username", fields, "", "text")
-        field(html, "osPassword", "Local admin password", fields, "", "password")
+        field(html, "osPassword", "Local password (optional, view-only user is enough)", fields, "", "password")
         val trusted = fields["trustConsoleCertificate"].orEmpty().let {
             it.equals("on", true) || it.equals("true", true) || it == "1"
         }
@@ -341,7 +338,7 @@ class SignInBridgeServer(
         html.append("<input type=\"hidden\" name=\"action\" value=\"upload\">")
         html.append("<label for=\"sitefile\">Site file (.unvr)</label>")
         html.append("<input id=\"sitefile\" name=\"sitefile\" type=\"file\" accept=\".unvr,.apt443,.json,application/octet-stream,application/json\">")
-        html.append("<p class=\"note\">Older .apt443 and .json copies still open. A Tailscale auth key in the file is saved on this TV.</p>")
+        html.append("<p class=\"note\">Older .apt443 and .json copies still open.</p>")
         html.append("<button type=\"submit\">Upload and connect</button>")
         html.append("</form></section>")
         html.append("<section id=\"link\" class=\"panel").append(if (panel == "link") " on" else "").append("\">")
@@ -350,7 +347,7 @@ class SignInBridgeServer(
         field(html, "fileUrl", "Direct download link", fields, "https://example.com/site.unvr", "url")
         html.append("<button type=\"submit\">Download and connect</button>")
         html.append("</form></section>")
-        html.append("<p class=\"note\">Stay on the same Wi‑Fi as the TV while you send the file. The local admin is a console account, not a ui.com login. A reusable Tailscale auth key makes this TV join your tailnet. On the home network, the console address is its home address. Away from home, use the console's own Tailscale IP or MagicDNS name. The key stays on the TV and is not shown again.</p>")
+        html.append("<p class=\"note\">Stay on the same Wi‑Fi as the TV while you send the file. The local admin is a console account, not a ui.com login. Use the console's address on your home network. Keys stay on the TV and are not shown again.</p>")
         html.append("<script>")
         html.append("function showPanel(id){")
         html.append("document.querySelectorAll('.panel').forEach(function(p){p.classList.toggle('on',p.id===id)});")
@@ -366,16 +363,9 @@ class SignInBridgeServer(
         return "<button type=\"button\" class=\"$on\" data-panel=\"$id\" onclick=\"showPanel('$id')\">$label</button>"
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun vpnFields(html: StringBuilder, fields: Map<String, String>) {
-        val vpn = fields["vpn"].orEmpty().ifBlank { "none" }
-        html.append("<label for=\"vpn\">Tailscale</label>")
-        html.append("<select id=\"vpn\" name=\"vpn\">")
-        vpnOption(html, "none", "None", vpn)
-        vpnOption(html, "tailscale", "Tailscale", vpn)
-        html.append("</select>")
-        field(html, "tailscaleAuthKey", "Tailscale auth key", fields, "", "password")
-        field(html, "tailscaleLoginServer", "Tailscale login server (optional)", fields, "https://", "url")
-        html.append("<p class=\"note\">Use a reusable auth key. This TV joins Tailscale itself. On the same network as the console, enter the console's home address (often 192.168.0.1). A 100.x address works only when that machine is the console itself. Leave the login server blank for a normal Tailscale account.</p>")
+        // Tailscale is not part of this LAN-only build.
     }
 
     private fun vpnOption(html: StringBuilder, value: String, label: String, selected: String) {
@@ -410,10 +400,6 @@ class SignInBridgeServer(
         pageHead(html, "Sign in", pageMode = "signin")
         html.append("<h1>Sign in</h1>")
         if (banner.isNotBlank()) html.append("<p class=\"lead\">").append(escape(banner)).append("</p>")
-        if (lastPackage != null) {
-            html.append("<p class=\"lead\">Save a copy of this site file, then choose your name.</p>")
-            html.append("<p><a class=\"button\" href=\"?download=1\">Download .unvr site file</a></p>")
-        }
         html.append("<p class=\"lead\">Choose your name, then confirm the email on file for your account.</p>")
         if (tenantsError.isNotBlank()) {
             html.append("<p class=\"error\">").append(escape(tenantsError)).append("</p>")
@@ -486,27 +472,6 @@ class SignInBridgeServer(
         html.append("fetch(location.pathname+'?watch=1',{cache:'no-store'}).then(function(r){return r.text()}).then(function(mode){")
         html.append("if(mode&&mode!==here)location.reload();}).catch(function(){});},2500);")
         html.append("</script></body></html>")
-    }
-
-    private fun serveSiteFile(socket: Socket) {
-        val bytes = lastPackage
-        if (bytes == null) {
-            writeHtml(socket, 200, simplePage("Create or upload a site file on this page first."))
-            return
-        }
-        val name = lastFileName.ifBlank { "apt443-site.${SitePackage.EXTENSION}" }.replace("\"", "")
-        val head = buildString {
-            append("HTTP/1.1 200 OK\r\n")
-            append("Content-Type: application/octet-stream\r\n")
-            append("Content-Disposition: attachment; filename=\"").append(name).append("\"\r\n")
-            append("Content-Length: ").append(bytes.size).append("\r\n")
-            append("Cache-Control: no-store\r\n")
-            append("Connection: close\r\n\r\n")
-        }
-        val out = socket.getOutputStream()
-        out.write(head.toByteArray(Charsets.US_ASCII))
-        out.write(bytes)
-        out.flush()
     }
 
     private fun simplePage(message: String): String {

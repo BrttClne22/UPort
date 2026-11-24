@@ -16,7 +16,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import app.apt443.Apt443Application
-import app.apt443.data.live.GoogleTranslateSpeech
+import app.apt443.data.live.DeviceSpeech
 import app.apt443.MainActivity
 import app.apt443.R
 import app.apt443.domain.AlertInset
@@ -57,7 +57,7 @@ class AlertOverlayService : Service() {
     private var spokenIds = ArrayDeque<String>()
     private var window: AlertWindowHost? = null
     private var latestSettings = AppSettings()
-    private lateinit var speech: GoogleTranslateSpeech
+    private lateinit var speech: DeviceSpeech
 
     override fun onCreate() {
         super.onCreate()

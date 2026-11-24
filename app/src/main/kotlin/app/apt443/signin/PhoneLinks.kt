@@ -2,17 +2,28 @@ package app.apt443.signin
 
 import android.content.Context
 import android.provider.Settings
+import java.security.SecureRandom
 
-/** Short LAN paths for phone QR codes: http://<tv-ip>:<port>/unifi/<tv-name> */
+/** LAN paths for phone QR codes: http://<tv-ip>:<port>/unifi/<tv-name>-<random token> */
 object PhoneLinks {
     const val PREFIX = "/unifi"
 
+    /**
+     * The TV name plus 128 random bits. Upstream used the device name alone, which anyone on
+     * the LAN could guess and use to post or pull a site file while the screen was open.
+     */
     fun slug(name: String): String {
         val cleaned = name.trim().lowercase()
             .replace(Regex("[^a-z0-9]+"), "-")
             .trim('-')
             .take(32)
-        return cleaned.ifBlank { "tv" }
+            .ifBlank { "tv" }
+        return "$cleaned-${randomToken()}"
+    }
+
+    private fun randomToken(): String {
+        val bytes = ByteArray(16).also { SecureRandom().nextBytes(it) }
+        return bytes.joinToString("") { "%02x".format(it) }
     }
 
     fun path(slug: String): String = "$PREFIX/$slug"
@@ -30,5 +41,5 @@ fun Context.tvLinkSlug(fallback: String = ""): String {
         Settings.Global.getString(contentResolver, "device_name"),
         Settings.System.getString(contentResolver, "device_name"),
     ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
-    return PhoneLinks.slug(named.ifBlank { fallback })
+    return named.ifBlank { fallback }
 }

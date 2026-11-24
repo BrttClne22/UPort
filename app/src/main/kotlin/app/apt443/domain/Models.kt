@@ -423,6 +423,8 @@ data class AppSettings(
     val cameraScreensaver: Boolean = true,
     /** Full-screen live view and recordings pause while any popup is open. */
     val pausePlaybackOnAlert: Boolean = false,
+    /** Cameras left off the live views on this TV. Playback still lists them. */
+    val hiddenCameraIds: Set<String> = emptySet(),
 )
 
 class FeatureBlockedException(message: String) : Exception(message)
@@ -459,3 +461,17 @@ fun Availability.explain(): String = when (this) {
     is Availability.HomeNetworkOnly -> message
     is Availability.NeedsSetup -> message
 }
+
+/** A Protect liveview (the multiview layouts Viewport shows). Slots are in Protect's order. */
+data class Liveview(
+    val id: String,
+    val name: String,
+    val isDefault: Boolean,
+    val slots: List<LiveviewSlot>,
+)
+
+/** One tile of a liveview. More than one camera means the tile cycles through them. */
+data class LiveviewSlot(
+    val cameraIds: List<String>,
+    val cycleIntervalSec: Int = 10,
+)

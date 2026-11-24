@@ -848,7 +848,6 @@ private fun PopupActionRow(
 ) {
     val actions = buildList {
         add(PopupAction.Watch)
-        if (showDoor) add(PopupAction.Door)
         if (hasSpeaker) add(PopupAction.Say)
         add(PopupAction.Ignore)
     }

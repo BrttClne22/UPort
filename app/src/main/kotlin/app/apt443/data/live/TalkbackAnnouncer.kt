@@ -3,7 +3,6 @@ package app.apt443.data.live
 import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
-import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.os.Bundle
 import android.os.Handler
@@ -19,7 +18,6 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -41,7 +39,7 @@ import kotlin.coroutines.resumeWithException
  * RFC 7587. Vorbis and anything else are refused. A WebSocket is used only when the session
  * has no UDP or RTP address, and the frames are paced there too.
  *
- * Speech comes from this TV's own engine when it has one, and from Google otherwise.
+ * Speech comes from this TV's own engine; nothing is sent to an online speech service.
  * The microphone is never opened.
  *
  * The engine stays bound for the life of the process. Preparing the words overlaps the
@@ -49,7 +47,7 @@ import kotlin.coroutines.resumeWithException
  */
 class TalkbackAnnouncer(
     private val context: Context,
-    private val speech: GoogleTranslateSpeech,
+    private val speech: DeviceSpeech,
 ) {
     private val ttsThread = HandlerThread("apt443-tts").apply { start() }
     private val ttsHandler = Handler(ttsThread.looper)
@@ -124,36 +122,11 @@ class TalkbackAnnouncer(
         }
     }
 
-    /**
-     * PCM for [text]. A warm engine is used on its own. Google starts only when that engine
-     * is missing or still binding, and it runs beside the engine instead of after it.
-     */
-    private suspend fun loadPcm(text: String): DecodedPcm {
-        if (ttsEngine.isCompleted) {
-            synthesize(text)?.let { return it }
-            return decodeMp3(speech.mp3(text))
-        }
-        return supervisorScope {
-            val remote = async(Dispatchers.IO) {
-                runCatching { decodeMp3(speech.mp3(text)) }.getOrNull()
-            }
-            val local = async { synthesize(text) }
-            val first = select<DecodedPcm?> {
-                local.onAwait { it }
-                remote.onAwait { it }
-            }
-            val pcm = when {
-                first != null -> first
-                local.isCompleted -> remote.await()
-                else -> local.await() ?: remote.await()
-            }
-            local.cancel()
-            remote.cancel()
-            pcm ?: error("Speech could not be created.")
-        }
-    }
+    /** PCM for [text] from the TV's own speech engine. No network speech service is used. */
+    private suspend fun loadPcm(text: String): DecodedPcm =
+        synthesize(text) ?: error("This TV's speech engine could not create that line.")
 
-    /** Local speech when the TV has an engine, which avoids a round trip to Google. */
+    /** Local speech from the TV's engine. */
     private suspend fun synthesize(text: String): DecodedPcm? {
         val engine = withTimeoutOrNull(ENGINE_WAIT_MS) { ttsEngine.await() } ?: return null
         val wav = runCatching { synthesizeWav(engine, text) }.getOrNull() ?: return null
@@ -342,91 +315,6 @@ private fun padSilence(pcm: ShortArray, sampleRate: Int, leadingMs: Int, trailin
 private data class AacFrame(val payload: ByteArray, val timeUs: Long)
 
 private data class DecodedPcm(val samples: ShortArray, val sampleRate: Int, val channels: Int)
-
-private fun decodeMp3(mp3: ByteArray): DecodedPcm {
-    val file = File.createTempFile("apt443-tts", ".mp3")
-    try {
-        file.writeBytes(mp3)
-        val extractor = MediaExtractor()
-        extractor.setDataSource(file.absolutePath)
-        var track = -1
-        var format: MediaFormat? = null
-        for (index in 0 until extractor.trackCount) {
-            val candidate = extractor.getTrackFormat(index)
-            val mime = candidate.getString(MediaFormat.KEY_MIME).orEmpty()
-            if (mime.startsWith("audio/")) {
-                track = index
-                format = candidate
-                break
-            }
-        }
-        if (track < 0 || format == null) error("Google speech was not audio.")
-        extractor.selectTrack(track)
-        val mime = format.getString(MediaFormat.KEY_MIME) ?: error("Google speech was not audio.")
-        val sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-        val channels = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
-            format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-        } else {
-            1
-        }
-        val codec = MediaCodec.createDecoderByType(mime)
-        val samples = ArrayList<Short>()
-        try {
-            codec.configure(format, null, null, 0)
-            codec.start()
-            val info = MediaCodec.BufferInfo()
-            var inputDone = false
-            var outputDone = false
-            var spins = 0
-            while (!outputDone && spins < 400) {
-                if (!inputDone) {
-                    val index = codec.dequeueInputBuffer(10_000)
-                    if (index >= 0) {
-                        val input = codec.getInputBuffer(index) ?: error("Decoder input was missing.")
-                        val size = extractor.readSampleData(input, 0)
-                        if (size < 0) {
-                            codec.queueInputBuffer(index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            inputDone = true
-                        } else {
-                            codec.queueInputBuffer(index, 0, size, extractor.sampleTime, 0)
-                            extractor.advance()
-                        }
-                    }
-                }
-                when (val out = codec.dequeueOutputBuffer(info, 10_000)) {
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> spins += 1
-                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> spins = 0
-                    else -> if (out >= 0) {
-                        spins = 0
-                        val output = codec.getOutputBuffer(out)
-                        if (output != null && info.size > 1) {
-                            output.position(info.offset)
-                            val bytes = ByteArray(info.size)
-                            output.get(bytes)
-                            var offset = 0
-                            while (offset + 1 < bytes.size) {
-                                val sample = (bytes[offset].toInt() and 0xff) or (bytes[offset + 1].toInt() shl 8)
-                                samples.add(sample.toShort())
-                                offset += 2
-                            }
-                        }
-                        val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                        codec.releaseOutputBuffer(out, false)
-                        if (eos) outputDone = true
-                    }
-                }
-            }
-        } finally {
-            runCatching { codec.stop() }
-            codec.release()
-            extractor.release()
-        }
-        if (samples.isEmpty()) error("Google speech decoded to silence.")
-        return DecodedPcm(samples.toShortArray(), sampleRate, channels.coerceAtLeast(1))
-    } finally {
-        file.delete()
-    }
-}
 
 private fun encodeAac(
     pcm: ShortArray,

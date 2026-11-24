@@ -37,7 +37,7 @@ class ConsoleSignIn(
             return when (error) {
                 is KeyFailure -> SignInResult.Failed(error.detail, error.untrustedCertificate)
                 else -> SignInResult.Failed(
-                    "Can't reach that console from this TV. Check the address. Away from home, this TV uses the saved Tailscale auth key.",
+                    "Can't reach that console from this TV. Check the address.",
                     untrustedCertificate = false,
                 )
             }
