@@ -29,6 +29,8 @@
 
 ---
 
+> **LAN-only fork for NVIDIA Shield.** This fork plays live camera audio (Play/Pause or hold OK on a tile to unmute it, several at once), and never talks to anything but the console on your local network: the api.ui.com cloud connector, Tailscale and Google TTS are removed, every HTTP connection is refused unless the remote address is private, the console certificate is pinned on first use, and site-file export is gone. A view-only local Protect user plus an API key is enough. The prebuilt `apk/UPort.apk` below is upstream's build; build this fork from source.
+
 ## What it does
 
 UPort is a leanback app for one site. It opens in demo mode so the interface can be explored before a console is connected. Switch to live in Settings and store the console host and API keys on the TV. Keys stay in the Android Keystore.

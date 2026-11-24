@@ -65,22 +65,6 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Always-on doorbell and camera alerts drawn over other apps on a single-site Android TV" />
         </service>
-        <!--
-            Fire TV has no Settings screen for SYSTEM_ALERT_WINDOW, so an enabled accessibility
-            service is the only way left to put an alert window above another app there.
-        -->
-        <service
-            android:name=".alert.Apt443AccessibilityService"
-            android:exported="true"
-            android:label="@string/accessibility_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
         <service
             android:name=".screensaver.CameraDream"
             android:exported="true"

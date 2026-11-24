@@ -323,7 +323,7 @@ class SignInBridgeServer(
         field(html, "consoleHost", "Console address", fields, "192.168.0.1", "text")
         field(html, "apiKey", "API key", fields, "", "password")
         field(html, "osUsername", "Local admin username", fields, "", "text")
-        field(html, "osPassword", "Local admin password", fields, "", "password")
+        field(html, "osPassword", "Local password (optional, view-only user is enough)", fields, "", "password")
         val trusted = fields["trustConsoleCertificate"].orEmpty().let {
             it.equals("on", true) || it.equals("true", true) || it == "1"
         }

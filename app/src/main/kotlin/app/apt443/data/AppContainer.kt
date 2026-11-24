@@ -492,6 +492,8 @@ class AppContainer(private val context: Context) {
 
     suspend fun applySitePackage(bytes: ByteArray, tvReachRaw: String? = null): Result<String> {
         val pack = SitePackage.parse(bytes).getOrElse { return Result.failure(it) }
+        // No local account in the file: connect with the Protect API key alone.
+        val signInMode = if (pack.osUsername.isBlank()) ConsoleSignInMode.ApiKeyOnly else ConsoleSignInMode.LocalUserAndApiKey
         SitePackage.parseTvReach(tvReachRaw).getOrElse { return Result.failure(it) }
         secrets.put(SecretKeys.PROTECT_API_KEY, pack.apiKey)
         secrets.put(SecretKeys.ACCESS_TOKEN, pack.apiKey)
@@ -520,7 +522,7 @@ class AppContainer(private val context: Context) {
             dataSource = DataSourceMode.Live,
             siteConfigured = true,
             accountGate = AccountGate.SignedOut,
-            signInMode = ConsoleSignInMode.LocalUserAndApiKey,
+            signInMode = signInMode,
             reachPreference = ReachPreference.Auto,
             reachChosen = true,
             vpnKind = if (kind == SiteVpnKind.WireGuard) SiteVpnKind.None else kind,
@@ -542,7 +544,7 @@ class AppContainer(private val context: Context) {
             draft,
             pack.apiKey,
             pack.osPassword,
-            ConsoleSignInMode.LocalUserAndApiKey,
+            signInMode,
         )
         return when (probe) {
             is SignInResult.SignedIn -> Result.success("Connected to ${pack.siteName}. Residents can sign in on the TV.")

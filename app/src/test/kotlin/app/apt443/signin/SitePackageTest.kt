@@ -258,4 +258,18 @@ class SitePackageTest {
         osUsername = "admin",
         osPassword = "local-pass",
     )
+
+    @Test
+    fun localAccountIsOptional() {
+        val payload = """{"format":"apt443-site","consoleHost":"10.10.40.1","apiKey":"k"}"""
+        val parsed = SitePackage.parse(payload.toByteArray()).getOrThrow()
+        assertEquals("", parsed.osUsername)
+        assertEquals("", parsed.osPassword)
+    }
+
+    @Test
+    fun localUsernameWithoutPasswordIsRejected() {
+        val payload = """{"format":"apt443-site","consoleHost":"10.10.40.1","apiKey":"k","osUsername":"viewer"}"""
+        assertTrue(SitePackage.parse(payload.toByteArray()).isFailure)
+    }
 }
