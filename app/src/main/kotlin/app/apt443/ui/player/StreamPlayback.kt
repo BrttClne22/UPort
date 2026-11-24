@@ -31,9 +31,17 @@ object StreamPlayback {
 
     fun buildPlayer(context: Context, url: String, client: OkHttpClient): ExoPlayer {
         val isRtsp = url.startsWith("rtsp", ignoreCase = true)
-        // Audio stays selected so a tile can be unmuted without reconnecting the stream.
-        // Each tile starts at volume 0; LiveAudio decides which ones are heard.
-        val trackSelector = DefaultTrackSelector(context)
+        // Live tiles start with audio off so a muted tile never decodes it; LiveAudio turns
+        // the track on for the tiles that should be heard (see LivePlayerSurface).
+        val trackSelector = DefaultTrackSelector(context).apply {
+            if (isRtsp) {
+                setParameters(
+                    buildUponParameters()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                        .build(),
+                )
+            }
+        }
         val builder = ExoPlayer.Builder(context)
             .setTrackSelector(trackSelector)
         if (isRtsp) {

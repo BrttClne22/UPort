@@ -52,6 +52,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
@@ -452,7 +453,14 @@ private fun LivePlayerSurface(
     }
 
     LaunchedEffect(player, paused) { player.playWhenReady = !paused }
-    LaunchedEffect(player, audible) { player.volume = if (audible) 1f else 0f }
+    LaunchedEffect(player, audible) {
+        // Select the audio track only while this tile is heard, so a muted tile never
+        // decodes audio and an audio problem can only affect tiles the viewer unmuted.
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, !audible)
+            .build()
+        player.volume = if (audible) 1f else 0f
+    }
     LaunchedEffect(player) {
         var started = System.currentTimeMillis()
         var lastPosition = -1L

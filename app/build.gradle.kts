@@ -96,8 +96,11 @@ dependencies {
     implementation(libs.zxing.core)
 
     implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.androidx.media3.exoplayer.rtsp)
     implementation(libs.androidx.media3.datasource.okhttp)
+    // media3-exoplayer-rtsp 1.11.1 is vendored under src/main/java with an Opus-over-RTP fix;
+    // its sources need these annotation jars at compile time only.
+    compileOnly("org.checkerframework:checker-qual:3.49.0")
+    compileOnly("com.google.errorprone:error_prone_annotations:2.36.0")
     implementation(libs.androidx.media3.ui.compose)
 
     testImplementation("junit:junit:4.13.2")
