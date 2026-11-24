@@ -78,14 +78,10 @@ private fun accessValue(values: List<String>, loaded: Boolean): String {
 fun AccountScreen(container: AppContainer) {
     val saved by container.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
     var note by remember { mutableStateOf("") }
-    var siteExportOpen by remember { mutableStateOf(false) }
     var accessInfo by remember { mutableStateOf(ResidentAccess()) }
     var accessLoaded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val exportFocus = remember { FocusRequester() }
-    val exportButtonFocus = remember { FocusRequester() }
-    var exportClosed by remember { mutableStateOf(0) }
     LaunchedEffect(saved.accountGate, saved.identityUserId, saved.accountEmail) {
         if (saved.accountGate != AccountGate.Console) return@LaunchedEffect
         accessLoaded = false
@@ -93,18 +89,6 @@ fun AccountScreen(container: AppContainer) {
         val latest = container.settings.first()
         accessInfo = container.access.grantsFor(latest.accountEmail, latest.identityUserId)
         accessLoaded = true
-    }
-    LaunchedEffect(siteExportOpen) {
-        if (!siteExportOpen) return@LaunchedEffect
-        repeat(4) {
-            withFrameNanos { }
-            if (runCatching { exportFocus.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
-        }
-    }
-    LaunchedEffect(exportClosed) {
-        if (exportClosed == 0) return@LaunchedEffect
-        withFrameNanos { }
-        runCatching { exportButtonFocus.requestFocus() }
     }
     val mode by container.protect.connectionMode.collectAsStateWithLifecycle(initialValue = ConnectionMode.Unconfigured)
     val signedIn = saved.accountGate == AccountGate.Console
@@ -143,15 +127,6 @@ fun AccountScreen(container: AppContainer) {
                     secondary = saved.accountName.takeIf { it.isNotBlank() && it != fullName },
                     email = saved.accountEmail.takeIf { signedIn && it.isNotBlank() },
                 ) {
-                    if (saved.siteConfigured) {
-                        AptButton(
-                            text = "Download site file",
-                            style = AptButtonStyle.Primary,
-                            icon = AptIconKind.Footage,
-                            onClick = { siteExportOpen = true },
-                            modifier = Modifier.focusRequester(exportButtonFocus),
-                        )
-                    }
                     AptButton(
                         text = if (signedIn) "Sign out" else "Sign in",
                         style = if (signedIn) AptButtonStyle.Secondary else AptButtonStyle.Primary,
@@ -199,25 +174,6 @@ fun AccountScreen(container: AppContainer) {
                         )
                     }
                 }
-            }
-        }
-        if (siteExportOpen) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .focusRequester(exportFocus)
-                    // The overlay covers the page; keep the remote inside it until it closes.
-                    .focusProperties { onExit = { if (requestedFocusDirection.isDpad()) cancelFocusChange() } }
-                    .focusGroup(),
-            ) {
-                SiteExportOverlay(
-                    container = container,
-                    siteName = saved.locationName.ifBlank { "UPort" },
-                    onDismiss = {
-                        siteExportOpen = false
-                        exportClosed++
-                    },
-                )
             }
         }
     }

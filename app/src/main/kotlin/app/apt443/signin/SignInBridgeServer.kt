@@ -166,9 +166,6 @@ class SignInBridgeServer(
             return
         }
         when {
-            request.method.equals("GET", ignoreCase = true) && queryParam(request.path, "download") == "1" -> {
-                serveSiteFile(socket)
-            }
             request.method.equals("GET", ignoreCase = true) && queryParam(request.path, "watch") == "1" -> {
                 val name = if (mode() == SignInFlowMode.SiteSetup) "setup" else "signin"
                 writeText(socket, 200, name)
@@ -410,10 +407,6 @@ class SignInBridgeServer(
         pageHead(html, "Sign in", pageMode = "signin")
         html.append("<h1>Sign in</h1>")
         if (banner.isNotBlank()) html.append("<p class=\"lead\">").append(escape(banner)).append("</p>")
-        if (lastPackage != null) {
-            html.append("<p class=\"lead\">Save a copy of this site file, then choose your name.</p>")
-            html.append("<p><a class=\"button\" href=\"?download=1\">Download .unvr site file</a></p>")
-        }
         html.append("<p class=\"lead\">Choose your name, then confirm the email on file for your account.</p>")
         if (tenantsError.isNotBlank()) {
             html.append("<p class=\"error\">").append(escape(tenantsError)).append("</p>")
@@ -486,27 +479,6 @@ class SignInBridgeServer(
         html.append("fetch(location.pathname+'?watch=1',{cache:'no-store'}).then(function(r){return r.text()}).then(function(mode){")
         html.append("if(mode&&mode!==here)location.reload();}).catch(function(){});},2500);")
         html.append("</script></body></html>")
-    }
-
-    private fun serveSiteFile(socket: Socket) {
-        val bytes = lastPackage
-        if (bytes == null) {
-            writeHtml(socket, 200, simplePage("Create or upload a site file on this page first."))
-            return
-        }
-        val name = lastFileName.ifBlank { "apt443-site.${SitePackage.EXTENSION}" }.replace("\"", "")
-        val head = buildString {
-            append("HTTP/1.1 200 OK\r\n")
-            append("Content-Type: application/octet-stream\r\n")
-            append("Content-Disposition: attachment; filename=\"").append(name).append("\"\r\n")
-            append("Content-Length: ").append(bytes.size).append("\r\n")
-            append("Cache-Control: no-store\r\n")
-            append("Connection: close\r\n\r\n")
-        }
-        val out = socket.getOutputStream()
-        out.write(head.toByteArray(Charsets.US_ASCII))
-        out.write(bytes)
-        out.flush()
     }
 
     private fun simplePage(message: String): String {
