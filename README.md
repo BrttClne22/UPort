@@ -1,4 +1,4 @@
 Debug test builds of harden/local-only for the office Shield.
 
-UPort-lanonly-debug.apk: built from 1c0500e
-SHA-256: 2e8fde62e3f2c23d13fe7eaef03e115c139f239c1aae86f8c9630e48c84bf12c
+UPort-lanonly-debug.apk: built from 47adc52
+SHA-256: bab08a879fecd2f9cd34fbfd8496c6a9375a67ff6ffe48f99a49e6750b6453f7
