@@ -52,7 +52,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
-import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
@@ -408,7 +407,8 @@ private fun LivePlayerSurface(
 ) {
     val context = LocalContext.current
     val isRtsp = url.startsWith("rtsp", ignoreCase = true)
-    val player = remember(url, attempt) { StreamPlayback.buildPlayer(context, url, client) }
+    // Audio is part of the key: toggling it reconnects this tile with or without the audio track.
+    val player = remember(url, attempt, audible) { StreamPlayback.buildPlayer(context, url, client, withAudio = audible) }
     val aspectCallback by rememberUpdatedState(onAspect)
     val signalCallback by rememberUpdatedState(onSignal)
     val hold by rememberUpdatedState(paused)
@@ -454,11 +454,6 @@ private fun LivePlayerSurface(
 
     LaunchedEffect(player, paused) { player.playWhenReady = !paused }
     LaunchedEffect(player, audible) {
-        // Select the audio track only while this tile is heard, so a muted tile never
-        // decodes audio and an audio problem can only affect tiles the viewer unmuted.
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, !audible)
-            .build()
         player.volume = if (audible) 1f else 0f
     }
     LaunchedEffect(player) {
