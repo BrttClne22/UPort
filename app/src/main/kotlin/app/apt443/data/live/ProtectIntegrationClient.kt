@@ -6,6 +6,8 @@ import app.apt443.domain.Camera
 import app.apt443.domain.ConsoleAccount
 import app.apt443.domain.ConnectionMode
 import app.apt443.domain.FootageClip
+import app.apt443.domain.Liveview
+import app.apt443.domain.LiveviewSlot
 import app.apt443.domain.ProtectClipQuery
 import app.apt443.domain.ProtectEvent
 import app.apt443.domain.ProtectEventType
@@ -43,6 +45,16 @@ class ProtectIntegrationClient(
         return http.text(settings, url, "GET", apiKeyHeader(key)).mapCatching { response ->
             if (response.code !in 200..299) error("Protect cameras HTTP ${response.code}")
             parseCameras(response.body)
+        }
+    }
+
+    /** Liveviews (multiview layouts) saved in Protect. */
+    suspend fun getLiveviews(settings: AppSettings, mode: ConnectionMode): Result<List<Liveview>> {
+        val key = keyFor(mode) ?: return Result.failure(IllegalStateException(missingKey(mode)))
+        val url = url(settings, mode, "/liveviews")
+        return http.text(settings, url, "GET", apiKeyHeader(key)).mapCatching { response ->
+            if (response.code !in 200..299) error("Protect liveviews HTTP ${response.code}")
+            parseLiveviews(response.body)
         }
     }
 
@@ -953,6 +965,47 @@ private fun splitFullName(full: String, first: String, last: String): Pair<Strin
         parts.isEmpty() -> Pair("", "")
         parts.size == 1 -> Pair(parts[0], "")
         else -> Pair(parts.first(), parts.last())
+    }
+}
+
+internal fun parseLiveviews(body: String): List<Liveview> {
+    val array = jsonArray(body, "data") ?: jsonArray(body, "liveviews") ?: return emptyList()
+    return buildList {
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val id = item.optString("id")
+            if (id.isBlank()) continue
+            val slotArray = item.optJSONArray("slots") ?: JSONArray()
+            val slots = buildList {
+                for (j in 0 until slotArray.length()) {
+                    val slot = slotArray.optJSONObject(j)
+                    val cameras = slot?.optJSONArray("cameras")
+                    val ids = buildList {
+                        if (cameras != null) {
+                            for (k in 0 until cameras.length()) {
+                                val camera = cameras.opt(k)
+                                val cameraId = when (camera) {
+                                    is String -> camera
+                                    is JSONObject -> camera.optString("id")
+                                    else -> ""
+                                }
+                                if (cameraId.isNotBlank()) add(cameraId)
+                            }
+                        }
+                    }
+                    val interval = slot?.optInt("cycleInterval", 10) ?: 10
+                    add(LiveviewSlot(ids, interval.coerceIn(3, 600)))
+                }
+            }
+            add(
+                Liveview(
+                    id = id,
+                    name = item.optString("name").ifBlank { "View" },
+                    isDefault = item.optBoolean("isDefault"),
+                    slots = slots,
+                ),
+            )
+        }
     }
 }
 

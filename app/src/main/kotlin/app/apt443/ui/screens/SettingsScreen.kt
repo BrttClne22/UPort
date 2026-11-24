@@ -910,8 +910,9 @@ private fun PhrasePreview(title: String, phrases: List<SpeakerPhrase>) {
 @Composable
 private fun CamerasPage(container: AppContainer, saved: AppSettings, cameras: Feed<Camera>) {
     val scope = rememberCoroutineScope()
+    val every by container.allCameras().collectAsStateWithLifecycle(initialValue = cameras)
     SettingsList {
-        if (cameras.items.isEmpty()) {
+        if (every.items.isEmpty()) {
             item(key = "empty") {
                 EmptyState(
                     title = "No cameras yet",
@@ -933,6 +934,28 @@ private fun CamerasPage(container: AppContainer, saved: AppSettings, cameras: Fe
                     style = AptButtonStyle.Primary,
                     onClick = { CameraWizardBus.openAll() },
                 )
+            }
+        }
+        item(key = "visible") {
+            SettingsSection(
+                title = "Show in this app",
+                description = "A hidden camera leaves every screen on this TV: live views, Playback, the screensaver and alerts.",
+            ) {
+                every.items.filter { it.id.isNotBlank() }.forEach { camera ->
+                    val shown = camera.id !in saved.hiddenCameraIds
+                    AptSwitchRow(
+                        label = camera.name.ifBlank { "Camera" },
+                        description = if (shown) "Shown" else "Hidden",
+                        checked = shown,
+                        icon = if (camera.isDoorbell) AptIconKind.Bell else AptIconKind.Camera,
+                        onToggle = {
+                            scope.editSettings(container) {
+                                val hidden = if (shown) it.hiddenCameraIds + camera.id else it.hiddenCameraIds - camera.id
+                                it.copy(hiddenCameraIds = hidden)
+                            }
+                        },
+                    )
+                }
             }
         }
         items(cameras.items, key = { it.id }) { camera ->

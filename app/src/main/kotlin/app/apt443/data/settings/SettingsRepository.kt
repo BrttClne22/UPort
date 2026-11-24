@@ -81,6 +81,7 @@ class SettingsRepository(
             prefs[Keys.KEEP_AWAKE] = settings.keepTvAwake.toString()
             prefs[Keys.CAMERA_SCREENSAVER] = settings.cameraScreensaver.toString()
             prefs[Keys.PAUSE_ON_ALERT] = settings.pausePlaybackOnAlert.toString()
+            prefs[Keys.HIDDEN_CAMERAS] = settings.hiddenCameraIds.filter { it.isNotBlank() }.sorted().joinToString(",")
             prefs[Keys.MANUAL_RTSP] = encodeManualRtsp(settings.manualRtspByCamera)
             writeAlertPrefs(prefs, settings.defaultAlertPrefs, settings.cameraAlertPrefs)
         }
@@ -162,6 +163,11 @@ class SettingsRepository(
             keepTvAwake = this[Keys.KEEP_AWAKE] != "false",
             cameraScreensaver = this[Keys.CAMERA_SCREENSAVER] != "false",
             pausePlaybackOnAlert = this[Keys.PAUSE_ON_ALERT] == "true",
+            hiddenCameraIds = this[Keys.HIDDEN_CAMERAS].orEmpty()
+                .split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet(),
             manualRtspByCamera = decodeManualRtsp(this[Keys.MANUAL_RTSP]),
         ).normalize()
     }
@@ -225,6 +231,7 @@ class SettingsRepository(
         val KEEP_AWAKE = stringPreferencesKey("keep_tv_awake")
         val CAMERA_SCREENSAVER = stringPreferencesKey("camera_screensaver")
         val PAUSE_ON_ALERT = stringPreferencesKey("pause_playback_on_alert")
+        val HIDDEN_CAMERAS = stringPreferencesKey("hidden_cameras")
         val MANUAL_RTSP = stringPreferencesKey("manual_rtsp_urls")
     }
 }

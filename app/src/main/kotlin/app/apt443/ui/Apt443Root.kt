@@ -113,6 +113,7 @@ import app.apt443.ui.screens.CameraWizardScreen
 import app.apt443.ui.screens.CamerasScreen
 import app.apt443.ui.screens.FootageScreen
 import app.apt443.ui.screens.LiveScreen
+import app.apt443.ui.screens.MultiviewScreen
 import app.apt443.ui.screens.SettingsScreen
 import app.apt443.ui.screens.SignInScreen
 import app.apt443.ui.screens.StreamSetupScreen
@@ -135,6 +136,7 @@ import app.apt443.ui.theme.AptType
 object Routes {
     const val Home = "home"
     const val Cameras = "cameras"
+    const val Multiview = "multiview"
     const val Live = "live/{cameraId}"
     const val Footage = "footage"
     const val Network = "network"
@@ -152,12 +154,12 @@ object Routes {
 private data class Destination(val route: String, val label: String, val icon: AptIconKind)
 
 private val destinations = listOf(
+    Destination(Routes.Multiview, "Multiview", AptIconKind.Tv),
     Destination(Routes.Cameras, "Live Feed", AptIconKind.Camera),
     Destination(Routes.Footage, "Playback", AptIconKind.Footage),
     Destination(Routes.Settings, "Settings", AptIconKind.Settings),
 )
 
-private val accountDestination = Destination(Routes.Account, "My account", AptIconKind.Account)
 
 @Composable
 private fun StartupLock(container: AppContainer, detail: String, canReset: Boolean) {
@@ -253,7 +255,8 @@ fun Apt443Root(container: AppContainer) {
         StartupLock(container, detail = (startup as Startup.Loading).detail, canReset = true)
         return
     }
-    if (current.accountGate != AccountGate.Console) {
+    // Household TV: the site file is the only setup step. No resident name/email pick.
+    if (!current.siteConfigured) {
         SignInScreen(container)
         return
     }
@@ -438,7 +441,7 @@ private fun SignedInShell(container: AppContainer, settings: AppSettings) {
             ) {
                 NavHost(
                     navController = nav,
-                    startDestination = Routes.Cameras,
+                    startDestination = Routes.Multiview,
                     enterTransition = { pageEnter },
                     exitTransition = { pageExit },
                     popEnterTransition = { pageEnter },
@@ -458,6 +461,7 @@ private fun SignedInShell(container: AppContainer, settings: AppSettings) {
                             },
                         ),
                 ) {
+                    composable(Routes.Multiview) { MultiviewScreen(container, client, nav) }
                     composable(Routes.Cameras) { CamerasScreen(container, client, nav) }
                     composable(
                         route = Routes.Live,
@@ -629,15 +633,13 @@ private fun Rail(
     ) {
         RailBrand(locationName = settings.locationName, expanded = expanded)
         Spacer(modifier = Modifier.height(AptSpace.lg))
-        val focusRoute = if (route == Routes.Account) {
-            Routes.Account
-        } else {
+        val focusRoute = run {
             destinations.firstOrNull { destination ->
                 val selected = route == destination.route ||
                     (destination.route == Routes.Cameras && route?.startsWith("live/") == true)
                 val homeOnly = destination.route == Routes.Network && mode != ConnectionMode.OnNetwork
                 selected && !homeOnly
-            }?.route ?: Routes.Cameras
+            }?.route ?: Routes.Multiview
         }
         destinations.forEach { destination ->
             val selected = route == destination.route ||
@@ -657,17 +659,6 @@ private fun Rail(
             )
         }
         Spacer(modifier = Modifier.weight(1f))
-        RailItem(
-            destination = accountDestination,
-            selected = route == Routes.Account,
-            expanded = expanded,
-            open = open,
-            focusRequester = if (route == Routes.Account) railFocus else null,
-            onClick = {
-                onClose()
-                nav.navigate(Routes.Account) { launchSingleTop = true }
-            },
-        )
         Spacer(modifier = Modifier.height(AptSpace.xs))
         RailStatus(mode = mode, cameras = cameras, expanded = expanded)
     }
