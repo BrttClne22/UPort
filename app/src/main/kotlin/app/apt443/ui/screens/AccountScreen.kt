@@ -162,7 +162,6 @@ fun AccountScreen(container: AppContainer) {
                 item(key = "perm-label") { SectionLabel("Permissions") }
                 item(key = "groups") { DetailRow("Groups", accessValue(accessInfo.groups, accessLoaded)) }
                 item(key = "policies") { DetailRow("Policies", accessValue(accessInfo.policies, accessLoaded)) }
-                item(key = "doors") { DetailRow("Doors", accessValue(accessInfo.doors, accessLoaded)) }
                 item(key = "cameras") { DetailRow("Cameras", accessValue(accessInfo.cameras, accessLoaded)) }
                 if (accessLoaded && accessInfo.detail.isNotBlank()) {
                     item(key = "perm-detail") {

@@ -132,13 +132,6 @@ fun SignInScreen(container: AppContainer) {
             Text(text = title, fontSize = AptType.hero, fontWeight = FontWeight.SemiBold, color = AptColors.OnBackground)
             Text(text = body, fontSize = AptType.body, color = AptColors.OnBackground.copy(alpha = 0.86f))
             InlineMessage(status, if (problem) StatusTone.Danger else StatusTone.Neutral)
-            if (saved.vpnKind == SiteVpnKind.Tailscale && vpn.stateLabel.isNotBlank()) {
-                InlineMessage("Tailscale: ${vpn.stateLabel}", statusTone(vpn))
-            }
-            val consent by container.vpnConsent.request.collectAsStateWithLifecycle()
-            if (consent != null) {
-                InlineMessage("Allow the VPN connection so this TV can join Tailscale.", StatusTone.Warning)
-            }
             if (siteReady) {
                 var confirmReset by remember { mutableStateOf(false) }
                 val resetFocus = remember { FocusRequester() }
@@ -159,7 +152,7 @@ fun SignInScreen(container: AppContainer) {
                     )
                 } else {
                     Text(
-                        text = "Delete the console and Tailscale login from this TV?",
+                        text = "Delete the console login from this TV?",
                         fontSize = AptType.body,
                         color = AptColors.OnBackground,
                     )

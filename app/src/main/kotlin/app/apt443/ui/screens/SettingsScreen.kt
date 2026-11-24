@@ -1008,10 +1008,6 @@ private fun SetupPage(
                     fontSize = AptType.body,
                     color = AptColors.Secondary,
                 )
-                InfoRow("Tailscale", if (saved.vpnKind == SiteVpnKind.Tailscale) vpn.stateLabel.ifBlank { "Saved" } else "None")
-                if (saved.vpnKind == SiteVpnKind.Tailscale && vpn.summary.isNotBlank()) {
-                    Text(vpn.summary, fontSize = AptType.body, color = AptColors.Secondary)
-                }
                 AptSwitchRow(
                     label = "Trust console certificate",
                     description = if (trustValue) {

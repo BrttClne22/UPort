@@ -338,7 +338,7 @@ class SignInBridgeServer(
         html.append("<input type=\"hidden\" name=\"action\" value=\"upload\">")
         html.append("<label for=\"sitefile\">Site file (.unvr)</label>")
         html.append("<input id=\"sitefile\" name=\"sitefile\" type=\"file\" accept=\".unvr,.apt443,.json,application/octet-stream,application/json\">")
-        html.append("<p class=\"note\">Older .apt443 and .json copies still open. A Tailscale auth key in the file is saved on this TV.</p>")
+        html.append("<p class=\"note\">Older .apt443 and .json copies still open.</p>")
         html.append("<button type=\"submit\">Upload and connect</button>")
         html.append("</form></section>")
         html.append("<section id=\"link\" class=\"panel").append(if (panel == "link") " on" else "").append("\">")
@@ -347,7 +347,7 @@ class SignInBridgeServer(
         field(html, "fileUrl", "Direct download link", fields, "https://example.com/site.unvr", "url")
         html.append("<button type=\"submit\">Download and connect</button>")
         html.append("</form></section>")
-        html.append("<p class=\"note\">Stay on the same Wi‑Fi as the TV while you send the file. The local admin is a console account, not a ui.com login. A reusable Tailscale auth key makes this TV join your tailnet. On the home network, the console address is its home address. Away from home, use the console's own Tailscale IP or MagicDNS name. The key stays on the TV and is not shown again.</p>")
+        html.append("<p class=\"note\">Stay on the same Wi‑Fi as the TV while you send the file. The local admin is a console account, not a ui.com login. Use the console's address on your home network. Keys stay on the TV and are not shown again.</p>")
         html.append("<script>")
         html.append("function showPanel(id){")
         html.append("document.querySelectorAll('.panel').forEach(function(p){p.classList.toggle('on',p.id===id)});")
@@ -363,16 +363,9 @@ class SignInBridgeServer(
         return "<button type=\"button\" class=\"$on\" data-panel=\"$id\" onclick=\"showPanel('$id')\">$label</button>"
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun vpnFields(html: StringBuilder, fields: Map<String, String>) {
-        val vpn = fields["vpn"].orEmpty().ifBlank { "none" }
-        html.append("<label for=\"vpn\">Tailscale</label>")
-        html.append("<select id=\"vpn\" name=\"vpn\">")
-        vpnOption(html, "none", "None", vpn)
-        vpnOption(html, "tailscale", "Tailscale", vpn)
-        html.append("</select>")
-        field(html, "tailscaleAuthKey", "Tailscale auth key", fields, "", "password")
-        field(html, "tailscaleLoginServer", "Tailscale login server (optional)", fields, "https://", "url")
-        html.append("<p class=\"note\">Use a reusable auth key. This TV joins Tailscale itself. On the same network as the console, enter the console's home address (often 192.168.0.1). A 100.x address works only when that machine is the console itself. Leave the login server blank for a normal Tailscale account.</p>")
+        // Tailscale is not part of this LAN-only build.
     }
 
     private fun vpnOption(html: StringBuilder, value: String, label: String, selected: String) {

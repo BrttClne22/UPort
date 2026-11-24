@@ -107,15 +107,12 @@ import app.apt443.ui.components.StatusDot
 import app.apt443.ui.components.StatusTone
 import app.apt443.ui.components.aptFocusFrame
 import app.apt443.ui.components.color
-import app.apt443.ui.screens.AccessScreen
 import app.apt443.ui.screens.AccountScreen
 import app.apt443.ui.screens.CameraWizardBus
 import app.apt443.ui.screens.CameraWizardScreen
 import app.apt443.ui.screens.CamerasScreen
 import app.apt443.ui.screens.FootageScreen
 import app.apt443.ui.screens.LiveScreen
-import app.apt443.ui.screens.NetworkScreen
-import app.apt443.ui.screens.RemoteScreen
 import app.apt443.ui.screens.SettingsScreen
 import app.apt443.ui.screens.SignInScreen
 import app.apt443.ui.screens.StreamSetupScreen
@@ -152,28 +149,11 @@ object Routes {
     fun stream(cameraId: String) = "stream/${android.net.Uri.encode(cameraId)}"
 }
 
-@Composable
-private fun TailscaleConsentPrompt(container: AppContainer) {
-    val context = LocalContext.current
-    val request by container.vpnConsent.request.collectAsStateWithLifecycle()
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        container.vpnConsent.complete(result.resultCode == Activity.RESULT_OK)
-    }
-    LaunchedEffect(request) {
-        if (request == null) return@LaunchedEffect
-        val intent = VpnService.prepare(context)
-        if (intent == null) container.vpnConsent.complete(true) else launcher.launch(intent)
-    }
-}
-
 private data class Destination(val route: String, val label: String, val icon: AptIconKind)
 
 private val destinations = listOf(
     Destination(Routes.Cameras, "Live Feed", AptIconKind.Camera),
     Destination(Routes.Footage, "Playback", AptIconKind.Footage),
-    Destination(Routes.Access, "Access", AptIconKind.Door),
-    Destination(Routes.Network, "Network", AptIconKind.Network),
-    Destination(Routes.Remote, "Tailscale", AptIconKind.Remote),
     Destination(Routes.Settings, "Settings", AptIconKind.Settings),
 )
 
@@ -225,7 +205,7 @@ private fun StartupLock(container: AppContainer, detail: String, canReset: Boole
             }
             if (canReset && confirmReset) {
                 Text(
-                    text = "Delete the console and Tailscale login from this TV?",
+                    text = "Delete the console login from this TV?",
                     fontSize = AptType.body,
                     color = AptColors.OnBackground,
                     textAlign = TextAlign.Center,
@@ -260,7 +240,6 @@ fun FocusDirection.isDpad(): Boolean =
 
 @Composable
 fun Apt443Root(container: AppContainer) {
-    TailscaleConsentPrompt(container)
     val settings by produceState<AppSettings?>(initialValue = null) {
         container.settings.collect { value = it }
     }
@@ -504,15 +483,6 @@ private fun SignedInShell(container: AppContainer, settings: AppSettings) {
                         )
                     }
                     composable(Routes.Footage) { FootageScreen(container, client) }
-                    composable(Routes.Network) {
-                        NetworkScreen(container, onOpenRemote = { nav.navigate(Routes.Remote) { launchSingleTop = true } })
-                    }
-                    composable(Routes.Remote) {
-                        RemoteScreen(container, onOpenSettings = { nav.navigate(Routes.Settings) { launchSingleTop = true } })
-                    }
-                    composable(Routes.Access) {
-                        AccessScreen(container, onOpenRemote = { nav.navigate(Routes.Remote) { launchSingleTop = true } })
-                    }
                     composable(Routes.Settings) { SettingsScreen(container) }
                     composable(Routes.Account) { AccountScreen(container) }
                 }
