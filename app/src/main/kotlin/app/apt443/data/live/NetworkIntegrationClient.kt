@@ -16,8 +16,7 @@ import org.json.JSONTokener
  * Official Network Integration API plus Site Manager for WAN metrics.
  *
  * Local base:  https://<console>/proxy/network/integration/v1
- * Remote base: https://api.ui.com/v1/connector/consoles/{id}/proxy/network/integration/v1
- * Site Manager (cloud only): https://api.ui.com/v1/hosts , /devices , /isp-metrics
+ * Cloud (api.ui.com) endpoints are removed in this LAN-only build.
  *
  * Sources: developer.ui.com Network integration and Site Manager v1 (checked Oct 2026).
  * When no Network integration key is saved, a local console admin session uses
@@ -78,30 +77,13 @@ class NetworkIntegrationClient(
         return legacy.authorizedWrite(settings, url, "POST", body).map { "Speed test started." }
     }
 
+    /** WAN health from the console itself. The cloud isp-metrics call is removed in this build. */
     suspend fun isp(settings: AppSettings): Result<WanStatus> {
-        val key = secrets.get(SecretKeys.SITE_MANAGER_KEY)
-        if (key.isNullOrBlank()) {
-            if (!canUseSession(settings)) {
-                return Result.failure(IllegalStateException("Site Manager API key is not set."))
-            }
-            val url = controllerUrl(settings, "stat/health")
-            return legacy.authorizedText(settings, url).mapCatching { parseControllerWan(it) }
+        if (!canUseSession(settings)) {
+            return Result.failure(IllegalStateException("Sign in to the console to see WAN health."))
         }
-        val hostFilter = settings.consoleId.trim()
-        val url = if (hostFilter.isBlank()) {
-            "https://api.ui.com/v1/isp-metrics"
-        } else {
-            "https://api.ui.com/v1/isp-metrics?hostIds[]=$hostFilter"
-        }
-        return http.text(
-            settings,
-            url,
-            "GET",
-            mapOf("Accept" to "application/json", "X-API-KEY" to key),
-        ).mapCatching { response ->
-            if (response.code !in 200..299) error("ISP metrics HTTP ${response.code}")
-            parseWan(response.body)
-        }
+        val url = controllerUrl(settings, "stat/health")
+        return legacy.authorizedText(settings, url).mapCatching { parseControllerWan(it) }
     }
 
     private suspend fun <T> sessionOrKey(

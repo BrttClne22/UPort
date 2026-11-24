@@ -93,8 +93,6 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
-    // tailscale-android 264102cc702fbd844e900227ee02e5cbb4d7f801, armeabi-v7a and arm64.
-    implementation(files("libs/libtailscale.aar"))
     implementation(libs.zxing.core)
 
     implementation(libs.androidx.media3.exoplayer)

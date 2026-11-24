@@ -700,7 +700,7 @@ class LiveProtectRepository(
     private fun labelSpeakerError(error: Throwable): Throwable {
         val message = error.message.orEmpty()
         return when {
-            message.startsWith("Google speech") -> error
+            message.startsWith("This TV's speech") -> error
             message.startsWith("Talkback") -> error
             message.contains("UniFi OS login HTTP 403", ignoreCase = true) ->
                 IllegalStateException(humanizeLoginFailure(message), error)

@@ -26,7 +26,7 @@ import java.io.File
  * Official Protect Integration API.
  *
  * Local:  https://<console>/proxy/protect/integration/v1
- * Remote: https://api.ui.com/v1/connector/consoles/{consoleId}/proxy/protect/integration/v1
+ * (The upstream cloud-connector path through api.ui.com is removed in this LAN-only build.)
  *
  * Source: developer.ui.com Protect integration (v7.x pages checked Oct 2026),
  * including cameras, events, snapshots, RTSPS, talkback, and subscribe/events.
@@ -242,32 +242,19 @@ class ProtectIntegrationClient(
         }
     }
 
-    private suspend fun keyFor(mode: ConnectionMode): String? {
-        return if (mode == ConnectionMode.Remote) {
-            secrets.get(SecretKeys.SITE_MANAGER_KEY)
-        } else {
-            secrets.get(SecretKeys.PROTECT_API_KEY)
-        }
-    }
+    /** LAN-only build: always the console's own Protect API key, never a cloud Site Manager key. */
+    @Suppress("UNUSED_PARAMETER")
+    private suspend fun keyFor(mode: ConnectionMode): String? = secrets.get(SecretKeys.PROTECT_API_KEY)
 
-    private fun missingKey(mode: ConnectionMode): String {
-        return if (mode == ConnectionMode.Remote) {
-            "Site Manager API key is not set."
-        } else {
-            "Protect integration API key is not set."
-        }
-    }
+    @Suppress("UNUSED_PARAMETER")
+    private fun missingKey(mode: ConnectionMode): String = "Protect integration API key is not set."
 
+    /** LAN-only build: the cloud connector at api.ui.com is never used. */
+    @Suppress("UNUSED_PARAMETER")
     private fun url(settings: AppSettings, mode: ConnectionMode, path: String): String {
-        return if (mode == ConnectionMode.Remote) {
-            val id = settings.consoleId.trim()
-            if (id.isBlank()) error("Console ID is required for the cloud connector.")
-            "https://api.ui.com/v1/connector/consoles/$id/proxy/protect/integration/v1$path"
-        } else {
-            val host = consoleHost(settings)
-            if (host.isBlank()) error("Console host is required.")
-            "https://$host/proxy/protect/integration/v1$path"
-        }
+        val host = consoleHost(settings)
+        if (host.isBlank()) error("Console host is required.")
+        return "https://$host/proxy/protect/integration/v1$path"
     }
 
     private suspend fun postPtz(

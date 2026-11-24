@@ -1,6 +1,7 @@
 package app.apt443.data.live
 
 import app.apt443.domain.AppSettings
+import app.apt443.net.LanOnly
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -83,6 +84,8 @@ class UnifiHttp {
             .readTimeout(25, TimeUnit.SECONDS)
             .writeTimeout(25, TimeUnit.SECONDS)
             .followRedirects(false)
+            .followSslRedirects(false)
+            .addNetworkInterceptor(LanOnly)
     }
 
     /** Drop sockets left over from the previous Wi-Fi or Ethernet link. */

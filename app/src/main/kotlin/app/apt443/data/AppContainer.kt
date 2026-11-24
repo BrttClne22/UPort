@@ -13,7 +13,7 @@ import app.apt443.data.live.LiveNetworkRepository
 import app.apt443.data.live.LiveProtectRepository
 import app.apt443.data.live.NetworkIntegrationClient
 import app.apt443.data.live.ProtectIntegrationClient
-import app.apt443.data.live.GoogleTranslateSpeech
+import app.apt443.data.live.DeviceSpeech
 import app.apt443.data.live.TalkbackAnnouncer
 import app.apt443.data.live.ProtectLegacySession
 import app.apt443.data.live.RecordingCache
@@ -82,7 +82,7 @@ class AppContainer(private val context: Context) {
     val http = UnifiHttp()
     val vpnReach = VpnReach(context, secrets)
     val vpnConsent = vpnReach.consent
-    val speech = GoogleTranslateSpeech(context.applicationContext)
+    val speech = DeviceSpeech(context.applicationContext)
 
     val settings: Flow<AppSettings> = settingsRepository.settings
 
